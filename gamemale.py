@@ -220,52 +220,89 @@ class Gamemale:
             'referer': f"https://{self.hostname}/plugin.php?id=viewui_draw&mod=list&ac=draw"
         }
         try:
-            res = self.session.post(url, data=data, headers=headers).text
-            self.task_logger.info(f"[Debug] 你画我猜服务器返回: {res[:50]}")
+            # 获取请求响应
+            response = self.session.post(url, data=data, headers=headers)
             
-            if "成功" in res or "succeed" in res or "200" in res:
+            # 【核心修复1】尝试将返回的 Unicode 乱码 JSON 解析为正常的中文
+            try:
+                res_json = response.json()
+                msg = res_json.get("message", response.text[:20])
+            except:
+                msg = response.text[:20]
+                
+            self.task_logger.info(f"[Debug] 你画我猜真实返回: {msg}")
+            
+            if "成功" in msg or "succeed" in msg:
                 return "出题成功"
-            elif "今日" in res or "上限" in res or "次" in res:
+            elif "今日" in msg or "上限" in msg or "用完" in msg:
                 return "额度已满"
             else:
-                return f"失败: {res[:10]}"
+                return f"失败: {msg[:10]}"
         except Exception as e:
             return "提交异常"
 
     def fetch_assets(self):
-        self.task_logger.info("正在获取实时个人资产数据...")
-        credit_url = f"https://{self.hostname}/home.php?mod=spacecp&ac=credit&op=base"
-        forum_url = f"https://{self.hostname}/forum.php"
+        self.task_logger.info("正在获取实时个人资产数据 (加载豪华面板)...")
+        url = f"https://{self.hostname}/home.php?mod=spacecp&ac=credit&op=base"
         try:
-            credit_res = self.session.get(credit_url).text
-            forum_res = self.session.get(forum_url).text
+            res = self.session.get(url).text
             
-            gold_match = re.search(r'金币\s*[:：]\s*(\d+)', forum_res) or re.search(r'金币\s*[:：]\s*(\d+)', credit_res)
-            current_gold = int(gold_match.group(1)) if gold_match else 0
+            # 1. 抓取账户基础信息 (致敬大佬的信息面板)
+            user_match = re.search(r'title="访问我的空间">([^<]+)</a>', res)
+            username = user_match.group(1) if user_match else self.username
             
+            uid_match = re.search(r'space(?:&amp;|&)uid=(\d+)', res)
+            uid = uid_match.group(1) if uid_match else "未知"
+            
+            group_match = re.search(r'<a href="home\.php\?mod=spacecp(?:&amp;|&)ac=usergroup"[^>]*>([^<]+)</a>', res)
+            usergroup = group_match.group(1) if group_match else "未知"
+            
+            # 2. 清洗 HTML，去除所有干扰标签 <em> </em>
+            clean_text = re.sub(r'<[^>]+>', '', res)
+            
+            credits_match = re.search(r'积分:\s*(\d+)', clean_text)
+            total_credits = credits_match.group(1) if credits_match else "0"
+            
+            # 3. 提取所有具体资产 (金币现在绝对跑不掉了)
+            assets_dict = {}
+            for item in ['金币', '血液', '旅程', '追随', '知识', '咒术', '堕落', '灵魂']:
+                match = re.search(f'{item}\\s*[:：]?\\s*(\\d+)', clean_text)
+                assets_dict[item] = int(match.group(1)) if match else 0
+                
+            current_gold = assets_dict['金币']
+            
+            # 4. 金币对比逻辑
             last_gold = current_gold
             if os.path.exists("gold_record.txt"):
                 with open("gold_record.txt", "r") as f:
                     content = f.read().strip()
                     if content.isdigit():
                         last_gold = int(content)
-            
+                        
             growth = current_gold - last_gold
             growth_str = f"+{growth}" if growth >= 0 else str(growth)
             
             with open("gold_record.txt", "w") as f:
                 f.write(str(current_gold))
                 
-            self.assets_report = f"- 金币: {current_gold} (较昨日: {growth_str})"
+            # 5. 生成精美的控制台与邮件报告
+            report = (
+                f"=== 账号信息 ===\n"
+                f"👤 用户: {username} (UID: {uid})\n"
+                f"👑 等级: {usergroup}\n"
+                f"🔰 积分: {total_credits}\n"
+                f"=== 资产状况 ===\n"
+                f"💰 金币: {current_gold} (较昨日 {growth_str})\n"
+                f"🩸 血液: {assets_dict['血液']} | ✈️ 旅程: {assets_dict['旅程']} | 👣 追随: {assets_dict['追随']}\n"
+                f"📚 知识: {assets_dict['知识']} | 🔮 咒术: {assets_dict['咒术']} | 🖤 堕落: {assets_dict['堕落']}\n"
+                f"👻 灵魂: {assets_dict['灵魂']}"
+            )
+            self.assets_report = report
             
-            clean_text = re.sub(r'<[^>]+>', '', credit_res)
-            matches = re.findall(r'(血液|旅程|追随|知识|咒术|堕落|灵魂)\s*[:：]?\s*(\d+)', clean_text)
-            if matches:
-                self.assets_report += "\n" + "\n".join([f"- {k}: {v}" for k, v in matches])
         except Exception as e:
             self.assets_report = f"资产抓取异常: {e}"
             
-        self.task_logger.info(f"当前账户资产状况:\n{self.assets_report}")
+        self.task_logger.info(f"当前账户综合看板:\n{self.assets_report}")
 
     def execute_interactive_tasks(self):
         self.task_logger.info("开始执行互动作业...")
@@ -293,14 +330,14 @@ class Gamemale:
             f"<p><b>核心签到:</b> {self.sign_result}</p>"
             f"<p><b>日常抽奖:</b> {self.exchange_result}</p>"
             f"<p><b>互动作业:</b> {self.task_result}</p>"
-            f"<br><h4>📊 当前实时资产状态：</h4>"
-            f"<pre style='background:#f4f4f4;padding:10px;border-radius:5px;font-family:monospace;'>{self.assets_report}</pre>"
+            f"<br><h4>📊 账户与资产实时看板：</h4>"
+            f"<pre style='background:#f4f4f4;padding:15px;border-radius:5px;font-family:monospace;line-height:1.6;font-size:14px;'>"
+            f"{self.assets_report}"
+            f"</pre>"
             f"<br><small style='color:#888;'>报告由 GM-All-In-One 自动化引擎生成</small>"
         )
         
         message = MIMEText(mail_content, 'html', 'utf-8')
-        
-        # [修复重点] 使用 formataddr 规范发送人和接收人头部格式，符合 RFC 协议要求
         message['From'] = formataddr((Header("GM-Bot", 'utf-8').encode(), mail_user))
         message['To'] = formataddr((Header("Master", 'utf-8').encode(), mail_to))
         message['Subject'] = Header(f"GameMale 任务运行报告 - {self.sign_result}", 'utf-8')
