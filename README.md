@@ -25,19 +25,17 @@
 
 ### 第三步：填入账号密码配置
 回到你的 GitHub 仓库页面，进入 `Settings` -> 左侧找 `Secrets and variables` -> 点 `Actions`。
-点击绿色的 **New repository secret** 按钮，挨个添加以下 7 个变量：
+点击绿色的 **New repository secret** 按钮，只需要添加以下 **5个核心变量** 即可：
 
 | 变量名 (Name) | 填什么 (Secret) |
 | :--- | :--- |
 | `USERNAME` | 你的 GameMale 论坛账号名 |
 | `PASSWORD` | 你的论坛登录密码 |
 | `SMTP_HOST` | `smtp.qq.com` (如果你用的是QQ邮箱) |
-| `SMTP_PORT` | `465` |
 | `MAIL_USER` | 你的发件邮箱（比如 123456@qq.com） |
 | `MAIL_PASS` | **刚才第二步获取的那一串字母授权码** |
-| `MAIL_TO` | 你用来接收报告的邮箱（不填就默认发给上面那个）|
-<img width="2410" height="1610" alt="image" src="https://github.com/user-attachments/assets/35f04249-4d3b-49a5-a3e6-05536ea95716" />
 
+*(注：如果你想把报告发给别的邮箱，可以再额外添加一个 `MAIL_TO` 变量填入接收邮箱。如果不填，则默认发给自己。)*
 
 ### 第四步：给脚本开放写入权限（防断签）
 为了让脚本能把每天的金币数量保存下来做对比，以及防止 GitHub 自动休眠你的任务，必须开放权限。
