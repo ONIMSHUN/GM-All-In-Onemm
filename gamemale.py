@@ -300,7 +300,7 @@ class Gamemale:
 
     def send_notification(self):
         smtp_host = os.getenv("SMTP_HOST")
-        smtp_port = os.getenv("SMTP_PORT", "465")
+        smtp_port = 465  # 【修改处】已直接写死为 465 端口
         mail_user = os.getenv("MAIL_USER")
         mail_pass = os.getenv("MAIL_PASS")
         mail_to = os.getenv("MAIL_TO", mail_user)
